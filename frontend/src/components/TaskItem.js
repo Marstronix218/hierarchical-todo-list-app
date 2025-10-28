@@ -149,20 +149,30 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
           onChange={handleToggleComplete}
         />
         
+        {hasChildren && (
+          <button 
+            onClick={handleToggleCollapse}
+            className="collapse-btn-inline"
+            title={task.collapsed ? 'Expand subtasks' : 'Collapse subtasks'}
+          >
+            {task.collapsed ? '▶' : '▼'}
+          </button>
+        )}
+        
         {isEditing ? (
-          <form onSubmit={handleEditTask} style={{ flex: 1, display: 'flex', gap: '0.3rem' }}>
+          <form onSubmit={handleEditTask} className="edit-form">
             <input
               type="text"
               value={editedTitle}
               onChange={(e) => setEditedTitle(e.target.value)}
               autoFocus
-              style={{ flex: 1, padding: '0.3rem', fontSize: '0.9rem' }}
+              className="edit-input"
             />
             <button type="submit" className="btn-success btn-small">
-              Save
+              ✓
             </button>
             <button type="button" onClick={handleCancelEdit} className="btn-secondary btn-small">
-              Cancel
+              ✕
             </button>
           </form>
         ) : (
@@ -175,49 +185,46 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
           </span>
         )}
 
-        <div className="task-buttons">
+        <div className="task-actions">
           {!isEditing && (
-            <button 
-              onClick={() => setIsEditing(true)}
-              className="btn-primary btn-small"
-            >
-              Edit
-            </button>
+            <>
+              <button 
+                onClick={() => setIsEditing(true)}
+                className="action-btn"
+                title="Edit task"
+              >
+                ✏️
+              </button>
+              
+              {depth < 2 && (
+                <button 
+                  onClick={() => setShowAddSubtask(!showAddSubtask)}
+                  className="action-btn"
+                  title="Add subtask"
+                >
+                  ➕
+                </button>
+              )}
+              
+              {canMove && allLists.length > 1 && (
+                <button 
+                  onClick={() => setShowMoveModal(true)}
+                  className="action-btn"
+                  title="Move to another list"
+                >
+                  ↔️
+                </button>
+              )}
+              
+              <button 
+                onClick={handleDelete}
+                className="action-btn action-btn-delete"
+                title="Delete task"
+              >
+                🗑️
+              </button>
+            </>
           )}
-          
-          {hasChildren && (
-            <button 
-              onClick={handleToggleCollapse}
-              className="collapse-btn btn-small"
-            >
-              {task.collapsed ? '▶' : '▼'}
-            </button>
-          )}
-          
-          {depth < 2 && (
-            <button 
-              onClick={() => setShowAddSubtask(!showAddSubtask)}
-              className="add-subtask-btn btn-small"
-            >
-              +Sub
-            </button>
-          )}
-          
-          {canMove && allLists.length > 1 && (
-            <button 
-              onClick={() => setShowMoveModal(true)}
-              className="btn-primary btn-small"
-            >
-              Move
-            </button>
-          )}
-          
-          <button 
-            onClick={handleDelete}
-            className="btn-danger btn-small"
-          >
-            Delete
-          </button>
         </div>
       </div>
 

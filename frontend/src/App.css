@@ -277,6 +277,75 @@ input[type="password"]:focus {
   color: #7f8c8d;
 }
 
+/* Collapse button inline with task */
+.collapse-btn-inline {
+  background: none;
+  border: none;
+  color: #9b59b6;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  margin-right: 0.3rem;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.collapse-btn-inline:hover {
+  transform: scale(1.2);
+  color: #8e44ad;
+}
+
+/* Edit form */
+.edit-form {
+  flex: 1;
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.edit-input {
+  flex: 1;
+  padding: 0.4rem;
+  font-size: 0.9rem;
+  border: 2px solid #3498db;
+  border-radius: 4px;
+}
+
+/* Task actions - hidden by default, shown on hover */
+.task-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.task-content:hover .task-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.action-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+  transform: scale(1.15);
+}
+
+.action-btn-delete:hover {
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+/* Old button styles - keeping for backwards compatibility */
 .task-buttons {
   display: flex;
   gap: 0.3rem;
