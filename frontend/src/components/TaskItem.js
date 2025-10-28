@@ -11,6 +11,8 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [selectedListId, setSelectedListId] = useState(task.list_id);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(task.title);
 
   /**
    * Toggle task completion status
@@ -82,6 +84,36 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
   };
 
   /**
+   * Edit task title
+   */
+  const handleEditTask = async (e) => {
+    e.preventDefault();
+    if (!editedTitle.trim()) {
+      alert('Task title cannot be empty');
+      return;
+    }
+
+    try {
+      await axios.put(`/api/tasks/${task.id}`, {
+        title: editedTitle
+      });
+      setIsEditing(false);
+      onRefresh(task.list_id);
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task');
+    }
+  };
+
+  /**
+   * Cancel editing
+   */
+  const handleCancelEdit = () => {
+    setEditedTitle(task.title);
+    setIsEditing(false);
+  };
+
+  /**
    * Move task to a different list (only for top-level tasks)
    */
   const handleMoveTask = async () => {
@@ -117,11 +149,42 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
           onChange={handleToggleComplete}
         />
         
-        <span className={`task-text ${task.completed ? 'completed' : ''}`}>
-          {task.title}
-        </span>
+        {isEditing ? (
+          <form onSubmit={handleEditTask} style={{ flex: 1, display: 'flex', gap: '0.3rem' }}>
+            <input
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              autoFocus
+              style={{ flex: 1, padding: '0.3rem', fontSize: '0.9rem' }}
+            />
+            <button type="submit" className="btn-success btn-small">
+              Save
+            </button>
+            <button type="button" onClick={handleCancelEdit} className="btn-secondary btn-small">
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <span 
+            className={`task-text ${task.completed ? 'completed' : ''}`}
+            onDoubleClick={() => setIsEditing(true)}
+            title="Double-click to edit"
+          >
+            {task.title}
+          </span>
+        )}
 
         <div className="task-buttons">
+          {!isEditing && (
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="btn-primary btn-small"
+            >
+              Edit
+            </button>
+          )}
+          
           {hasChildren && (
             <button 
               onClick={handleToggleCollapse}
