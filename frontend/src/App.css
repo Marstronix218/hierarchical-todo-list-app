@@ -191,9 +191,17 @@ input[type="password"]:focus {
 /* Lists Container */
 .lists-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  /* Force two columns for wider cards */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2rem;
   margin-top: 2rem;
+}
+
+/* Responsive: collapse to one column on small screens */
+@media (max-width: 768px) {
+  .lists-container {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* List Card */
@@ -247,6 +255,15 @@ input[type="password"]:focus {
   background: #f8f9fa;
   border-radius: 4px;
   border-left: 3px solid #3498db;
+}
+
+.task-item[draggable="true"] {
+  cursor: grab;
+}
+
+.task-item.drag-over .task-content {
+  outline: 2px dashed #3498db;
+  background: #eef7ff;
 }
 
 .task-content.completed {
@@ -396,6 +413,22 @@ input[type="password"]:focus {
   margin-bottom: 2rem;
   display: flex;
   gap: 0.5rem;
+}
+
+/* Drag & Drop - List top-level drop zone */
+.list-drop-zone {
+  border: 2px dashed #bdc3c7;
+  color: #7f8c8d;
+  border-radius: 6px;
+  padding: 0.5rem;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.list-drop-zone.active {
+  border-color: #3498db;
+  background: #eef7ff;
+  color: #2c3e50;
 }
 
 .new-list-section input {

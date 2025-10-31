@@ -1,0 +1,13 @@
+{
+  "name": "hierarchical-todo-list-app-root",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root-level package to proxy frontend scripts so you can run npm commands from the project root.",
+  "scripts": {
+    "start": "npm --prefix frontend start",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix frontend test",
+    "install-frontend": "npm --prefix frontend install",
+    "clean": "rm -rf frontend/node_modules frontend/build"
+  }
+}

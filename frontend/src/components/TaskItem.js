@@ -11,8 +11,10 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [selectedListId, setSelectedListId] = useState(task.list_id);
+  const [selectedParentId, setSelectedParentId] = useState(task.parent_id ?? null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   /**
    * Toggle task completion status
@@ -114,33 +116,125 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
   };
 
   /**
-   * Move task to a different list (only for top-level tasks)
+   * Move task: allow moving under any parent in any list
    */
   const handleMoveTask = async () => {
-    if (selectedListId === task.list_id) {
-      setShowMoveModal(false);
-      return;
-    }
-
     try {
       await axios.put(`/api/tasks/${task.id}/move`, {
-        list_id: selectedListId
+        list_id: selectedListId,
+        parent_id: selectedParentId
       });
       setShowMoveModal(false);
-      // Refresh both the old and new lists
+      // Refresh possibly affected lists
       onRefresh(task.list_id);
-      onRefresh(selectedListId);
+      if (selectedListId !== task.list_id) onRefresh(selectedListId);
     } catch (error) {
       console.error('Error moving task:', error);
       alert(error.response?.data?.error || 'Failed to move task');
     }
   };
 
+  /**
+   * Reorder task up or down among siblings
+   */
+  const handleReorder = async (direction) => {
+    try {
+      await axios.put(`/api/tasks/${task.id}/reorder`, {
+        direction
+      });
+      onRefresh(task.list_id);
+    } catch (error) {
+      console.error('Error reordering task:', error);
+      alert(error.response?.data?.error || 'Failed to reorder task');
+    }
+  };
+
+  // Helpers to build parent selection list while preventing cycles
+  const collectDescendantIds = (node) => {
+    const ids = new Set();
+    const stack = [...(node.children || [])];
+    while (stack.length) {
+      const n = stack.pop();
+      ids.add(n.id);
+      if (n.children) stack.push(...n.children);
+    }
+    return ids;
+  };
+
+  const forbiddenIds = React.useMemo(() => collectDescendantIds(task), [task]);
+
+  const flattenTasks = (nodes, prefix = '') => {
+    const result = [];
+    (nodes || []).forEach((n) => {
+      result.push({ id: n.id, label: `${prefix}${n.title}` });
+      if (n.children && n.children.length) {
+        result.push(...flattenTasks(n.children, `${prefix}— `));
+      }
+    });
+    return result;
+  };
+
+  const selectedList = allLists.find((l) => l.id === selectedListId);
+  const parentOptions = selectedList ? flattenTasks(selectedList.tasks || []) : [];
+
   const hasChildren = task.children && task.children.length > 0;
-  const canMove = !task.parent_id; // Only top-level tasks can be moved
+  const canMove = true; // Any task can be moved
 
   return (
-    <div className="task-item">
+    <div
+      className={`task-item ${isDragOver ? 'drag-over' : ''}`}
+      draggable
+      onDragStart={(e) => {
+        // mark this task as the dragged source
+        try {
+          e.dataTransfer.setData(
+            'application/json',
+            JSON.stringify({ taskId: task.id, listId: task.list_id })
+          );
+        } catch (err) {
+          // noop
+        }
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+        e.dataTransfer.dropEffect = 'move';
+      }}
+      onDragLeave={(e) => {
+        e.stopPropagation();
+        setIsDragOver(false);
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+        let payload = null;
+        try {
+          const text = e.dataTransfer.getData('application/json');
+          payload = JSON.parse(text);
+        } catch (err) {
+          return;
+        }
+        if (!payload || !payload.taskId) return;
+        if (payload.taskId === task.id) return; // ignore dropping onto itself
+        try {
+          await axios.put(`/api/tasks/${payload.taskId}/move`, {
+            list_id: task.list_id,
+            parent_id: task.id
+          });
+          // refresh affected lists
+          onRefresh(task.list_id);
+          if (payload.listId && payload.listId !== task.list_id) {
+            onRefresh(payload.listId);
+          }
+        } catch (error) {
+          console.error('Error moving via DnD:', error);
+          alert(error.response?.data?.error || 'Failed to move task');
+        }
+      }}
+    >
       <div className={`task-content ${task.completed ? 'completed' : ''}`}>
         <input
           type="checkbox"
@@ -189,6 +283,22 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
           {!isEditing && (
             <>
               <button 
+                onClick={() => handleReorder('up')}
+                className="action-btn"
+                title="Move up"
+              >
+                ⬆️
+              </button>
+              
+              <button 
+                onClick={() => handleReorder('down')}
+                className="action-btn"
+                title="Move down"
+              >
+                ⬇️
+              </button>
+              
+              <button 
                 onClick={() => setIsEditing(true)}
                 className="action-btn"
                 title="Edit task"
@@ -196,15 +306,13 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
                 ✏️
               </button>
               
-              {depth < 2 && (
-                <button 
-                  onClick={() => setShowAddSubtask(!showAddSubtask)}
-                  className="action-btn"
-                  title="Add subtask"
-                >
-                  ➕
-                </button>
-              )}
+              <button 
+                onClick={() => setShowAddSubtask(!showAddSubtask)}
+                className="action-btn"
+                title="Add subtask"
+              >
+                ➕
+              </button>
               
               {canMove && allLists.length > 1 && (
                 <button 
@@ -253,7 +361,7 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
 
       {/* Subtasks */}
       {hasChildren && !task.collapsed && (
-        <div className="subtasks">
+        <div className="subtasks" style={{ marginLeft: `${Math.min((depth + 1) * 16, 64)}px` }}>
           {task.children.map(child => (
             <div key={child.id} className="subtask-item">
               <TaskItem
@@ -273,15 +381,30 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
         <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Move Task</h3>
-            <p>Select a list to move this task to:</p>
+            <p>Select a destination list and optional parent:</p>
             <select 
               value={selectedListId} 
-              onChange={(e) => setSelectedListId(parseInt(e.target.value))}
+              onChange={(e) => { setSelectedListId(parseInt(e.target.value)); setSelectedParentId(null); }}
             >
               {allLists.map(list => (
                 <option key={list.id} value={list.id}>
                   {list.name} {list.id === task.list_id ? '(current)' : ''}
                 </option>
+              ))}
+            </select>
+            <div style={{ height: '0.5rem' }} />
+            <select
+              value={selectedParentId ?? ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedParentId(v === '' ? null : parseInt(v));
+              }}
+            >
+              <option value="">(Top level)</option>
+              {parentOptions.map((opt) => (
+                (opt.id !== task.id && !forbiddenIds.has(opt.id)) && (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                )
               ))}
             </select>
             <div className="modal-buttons">

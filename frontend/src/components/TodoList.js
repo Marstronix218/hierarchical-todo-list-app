@@ -9,6 +9,7 @@ import TaskItem from './TaskItem';
 
 function TodoList({ list, allLists, onDelete, onRefresh }) {
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [isDropActive, setIsDropActive] = useState(false);
 
   /**
    * Create a new top-level task
@@ -53,6 +54,44 @@ function TodoList({ list, allLists, onDelete, onRefresh }) {
         />
         <button type="submit" className="btn-success">Add</button>
       </form>
+
+      {/* Top-level drop zone to move tasks here */}
+      <div
+        className={`list-drop-zone ${isDropActive ? 'active' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDropActive(true);
+        }}
+        onDragLeave={() => setIsDropActive(false)}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setIsDropActive(false);
+          let payload = null;
+          try {
+            payload = JSON.parse(e.dataTransfer.getData('application/json'));
+          } catch (err) {
+            return;
+          }
+          if (!payload || !payload.taskId) return;
+          try {
+            await axios.put(`/api/tasks/${payload.taskId}/move`, {
+              list_id: list.id,
+              parent_id: null
+            });
+            onRefresh(list.id);
+            if (payload.listId && payload.listId !== list.id) {
+              onRefresh(payload.listId);
+            }
+          } catch (error) {
+            console.error('Error moving to top-level via DnD:', error);
+            alert(error.response?.data?.error || 'Failed to move task');
+          }
+        }}
+        title="Drop here to move task to top level"
+        style={{ marginBottom: '0.5rem' }}
+      >
+        Drop here to move to top level
+      </div>
 
       <div className="tasks-container">
         {list.tasks && list.tasks.length > 0 ? (

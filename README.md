@@ -21,7 +21,7 @@ A full-stack web application that allows users to create and manage hierarchical
 2. **Task Management**
    - Create, read, update, and delete tasks
    - Mark tasks as complete/incomplete
-   - Tasks can be nested up to 3 levels deep (task → subtask → sub-subtask)
+   - Tasks support infinite nesting (task → subtask → sub-subtask → ...)
    - Visual indication of completed tasks
 
 3. **Collapse/Expand Functionality**
@@ -29,10 +29,10 @@ A full-stack web application that allows users to create and manage hierarchical
    - Helps users focus on important tasks
    - State is preserved in the database
 
-4. **Move Tasks Between Lists**
-   - Top-level tasks can be moved to different lists
-   - Maintains all subtasks when moving
-   - Simple modal interface for list selection
+4. **Move Tasks & Reparenting**
+   - Move any task or subtask to any list
+   - Reparent to another task or to the top level using the Move action
+   - Subtrees maintain integrity; moving across lists updates the entire subtree
 
 5. **Multiple Lists**
    - Users can create multiple todo lists
@@ -132,20 +132,36 @@ python3 app.py
 
 ### Frontend Setup (React)
 
-Open a **new terminal window** and run:
+Open a **new terminal window** and run one of the following options:
+
+Option A — from the project root (no cd needed):
 
 ```bash
-# Navigate to frontend directory
+# From hierarchical_todo_list_app/
+# First time only: install frontend deps from root
+npm run install-frontend
+
+# Start the React development server from root
+npm start
+```
+
+Option B — from the frontend directory (original way):
+
+```bash
 cd hierarchical_todo_list_app/frontend
-
-# Install dependencies
 npm install
-
-# Start the React development server
 npm start
 ```
 
 The frontend will start on `http://localhost:3000` and automatically open in your browser.
+
+### UI Notes
+
+- Lists display in two columns on desktop for roomier cards.
+- Tasks can be nested without a depth limit. Deep trees will indent progressively; text remains visible and wraps as needed.
+- Drag and drop: drag a task onto another task to make it a subtask; drag a task into a list's dashed "Drop here" zone to make it top-level in that list. Cross-list moves are supported.
+- The "↔️" Move action is also available as a precise alternative to drag-and-drop.
+- Reordering: use ⬆️ and ⬇️ buttons on any task to move it up or down among its siblings.
 
 ## Usage Guide
 
@@ -167,13 +183,15 @@ The frontend will start on `http://localhost:3000` and automatically open in you
 4. **Add Subtasks**
    - Click the "+Sub" button on any task
    - Enter the subtask title and click "Add"
-   - You can nest tasks up to 3 levels deep
+   - You can nest tasks without a depth limit
 
 5. **Manage Tasks**
    - **Complete**: Click the checkbox to mark complete
    - **Collapse**: Click the ▼ button to hide subtasks
-   - **Move**: Click "Move" to transfer to another list (top-level only)
-   - **Delete**: Click "Delete" to remove the task and all subtasks
+   - **Reorder**: Use ⬆️ / ⬇️ buttons to change task order
+   - **Move**: Click "↔️" to transfer to another list or parent
+   - **Drag & Drop**: Drag tasks onto other tasks or into list drop zones
+   - **Delete**: Click "🗑️" to remove the task and all subtasks
 
 ### Key Features Demo
 
@@ -201,7 +219,8 @@ The frontend will start on `http://localhost:3000` and automatically open in you
 
 - `POST /api/tasks` - Create a new task
 - `PUT /api/tasks/:id` - Update a task
-- `PUT /api/tasks/:id/move` - Move a task to another list
+- `PUT /api/tasks/:id/move` - Move a task to another list and/or under another task. Body: `{ list_id?: number, parent_id?: number | null }`
+- `PUT /api/tasks/:id/reorder` - Reorder task among siblings. Body: `{ direction: 'up' | 'down' }`
 - `DELETE /api/tasks/:id` - Delete a task
 
 All authenticated endpoints require `Authorization: Bearer <token>` header.
@@ -245,19 +264,15 @@ All authenticated endpoints require `Authorization: Bearer <token>` header.
 
 ## Development Notes
 
-- The depth limit of 3 levels is enforced in the UI (see `TaskItem.js` line 124)
 - Tasks cascade delete (deleting a task deletes all subtasks)
-- Moving tasks only works for top-level tasks (enforced in backend)
+- Tasks can be moved across lists or reparented; cycles (moving under your own descendant) are prevented server-side
 - Collapsed state is saved per-task in the database
 - JWT tokens expire after 7 days
 
 ## Known Limitations
 
-1. Top-level tasks only can be moved between lists (as per MVP requirements)
-2. Maximum nesting depth of 3 levels (task → subtask → sub-subtask)
-3. No task reordering within a list
-4. No task editing (title is immutable after creation)
-5. No forgot password functionality
+1. No explicit drag-and-drop reordering yet (moves are via the Move action modal)
+2. No forgot password functionality
 
 ## Future Enhancements
 
@@ -301,6 +316,29 @@ To test the application:
 6. Test marking tasks as complete
 7. Test deleting tasks and lists
 8. Log out and log back in to verify data persistence
+
+### Automated tests
+
+- Backend tests (pytest): tests infinite nesting API and task moves, including cycle prevention.
+- Frontend tests (React Testing Library): verifies rendering of a 5-level nested task tree.
+
+From the project root:
+
+```bash
+# Install backend dependencies (includes pytest)
+pip3 install -r requirements.txt
+
+# Ensure backend is running in another terminal
+python3 app.py
+
+# Run backend tests
+pytest -q
+
+# Run frontend tests
+npm test -- --watchAll=false
+```
+
+Note: Backend tests exercise the live API. Make sure the Flask server is listening on http://localhost:5000.
 
 ## Author
 

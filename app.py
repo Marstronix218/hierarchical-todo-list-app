@@ -71,9 +71,16 @@ class TodoList(db.Model):
             'created_at': self.created_at.isoformat()
         }
         if include_tasks:
-            # Only include top-level tasks (tasks without parent)
-            top_level_tasks = [task for task in self.tasks if task.parent_id is None]
-            result['tasks'] = [task.to_dict(include_children=True) for task in top_level_tasks]
+            # Only include top-level tasks, ordered by position
+            top_level_tasks = [
+                task for task in self.tasks
+                if task.parent_id is None
+            ]
+            top_level_tasks.sort(key=lambda t: t.position)
+            result['tasks'] = [
+                task.to_dict(include_children=True)
+                for task in top_level_tasks
+            ]
         return result
 
 
@@ -84,14 +91,22 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(500), nullable=False)
     completed = db.Column(db.Boolean, default=False)
-    collapsed = db.Column(db.Boolean, default=False)  # Whether subtasks are hidden
-    list_id = db.Column(db.Integer, db.ForeignKey('todo_lists.id'), nullable=False)
-    parent_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+    collapsed = db.Column(db.Boolean, default=False)
+    list_id = db.Column(db.Integer, db.ForeignKey('todo_lists.id'),
+                        nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('tasks.id'),
+                          nullable=True)
+    position = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Self-referential relationship for hierarchy
-    children = db.relationship('Task', backref=db.backref('parent', remote_side=[id]), 
-                               lazy=True, cascade='all, delete-orphan')
+    children = db.relationship(
+        'Task',
+        backref=db.backref('parent', remote_side=[id]),
+        lazy=True,
+        cascade='all, delete-orphan',
+        order_by='Task.position'
+    )
     
     def to_dict(self, include_children=False):
         """Convert task to dictionary"""
@@ -102,10 +117,14 @@ class Task(db.Model):
             'collapsed': self.collapsed,
             'list_id': self.list_id,
             'parent_id': self.parent_id,
+            'position': self.position,
             'created_at': self.created_at.isoformat()
         }
         if include_children:
-            result['children'] = [child.to_dict(include_children=True) for child in self.children]
+            result['children'] = [
+                child.to_dict(include_children=True)
+                for child in self.children
+            ]
         return result
 
 
@@ -289,23 +308,31 @@ def create_task():
     data = request.get_json()
     
     if not data or not data.get('title') or not data.get('list_id'):
-        return jsonify({'error': 'Task title and list_id are required'}), 400
+        return jsonify({'error': 'Task title and list_id required'}), 400
     
     # Verify list ownership
     todo_list = TodoList.query.get(data['list_id'])
     if not todo_list or todo_list.user_id != request.current_user_id:
         return jsonify({'error': 'List not found or unauthorized'}), 403
     
-    # If parent_id is provided, verify it exists and belongs to the same list
+    # If parent_id is provided, verify it exists and belongs to same list
     if data.get('parent_id'):
         parent = Task.query.get(data['parent_id'])
         if not parent or parent.list_id != data['list_id']:
             return jsonify({'error': 'Invalid parent task'}), 400
     
+    # Determine position: max position of siblings + 1
+    siblings = Task.query.filter_by(
+        list_id=data['list_id'],
+        parent_id=data.get('parent_id')
+    ).all()
+    max_position = max([s.position for s in siblings], default=-1)
+    
     new_task = Task(
         title=data['title'],
         list_id=data['list_id'],
-        parent_id=data.get('parent_id')
+        parent_id=data.get('parent_id'),
+        position=max_position + 1
     )
     
     db.session.add(new_task)
@@ -344,32 +371,140 @@ def update_task(task_id):
 @app.route('/api/tasks/<int:task_id>/move', methods=['PUT'])
 @require_auth
 def move_task(task_id):
-    """Move a task to a different list (only for top-level tasks)"""
+    """Move a task to a new parent and/or list.
+
+    Payload JSON:
+      - list_id (optional): target list id. If omitted, stays in current list.
+      - parent_id (optional, nullable): new parent task id. Use null for top-level.
+
+    Rules:
+      - User must own both the task and destination list/parent.
+      - Cannot make a task a child of itself or any of its descendants (prevent cycles).
+      - When moving across lists, the entire subtree's list_id is updated.
+    """
+    task = Task.query.get(task_id)
+
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+
+    # Verify ownership via current list
+    if task.list.user_id != request.current_user_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    data = request.get_json() or {}
+    target_list_id = data.get('list_id', task.list_id)
+    target_parent_id = data.get('parent_id') if 'parent_id' in data else task.parent_id
+
+    # Validate target list
+    target_list = TodoList.query.get(target_list_id)
+    if not target_list or target_list.user_id != request.current_user_id:
+        return jsonify({'error': 'Target list not found or unauthorized'}), 403
+
+    # Validate target parent if provided
+    target_parent = None
+    if target_parent_id is not None:
+        target_parent = Task.query.get(target_parent_id)
+        if not target_parent:
+            return jsonify({'error': 'Target parent task not found'}), 404
+        # Parent must be in target list
+        if target_parent.list_id != target_list_id:
+            return jsonify({'error': 'Target parent must belong to the target list'}), 400
+        # Ownership already ensured by list ownership check above
+
+    # Prevent cycles: target parent cannot be the task itself or its descendant
+    def collect_descendant_ids(node: 'Task'):
+        ids = set()
+        stack = list(node.children)
+        while stack:
+            n = stack.pop()
+            ids.add(n.id)
+            stack.extend(n.children)
+        return ids
+
+    if target_parent_id is not None:
+        if target_parent_id == task.id:
+            return jsonify({'error': 'Cannot set a task as its own parent'}), 400
+        descendant_ids = collect_descendant_ids(task)
+        if target_parent_id in descendant_ids:
+            return jsonify({'error': 'Cannot move a task under its own descendant'}), 400
+
+    # Apply changes
+    task.parent_id = target_parent_id
+    moving_across_lists = (task.list_id != target_list_id)
+    task.list_id = target_list_id
+
+    # If moving across lists, update subtree list_id as well
+    if moving_across_lists:
+        stack = list(task.children)
+        while stack:
+            n = stack.pop()
+            n.list_id = target_list_id
+            stack.extend(n.children)
+    
+    # Set position to end of new sibling group
+    new_siblings = Task.query.filter_by(
+        list_id=target_list_id,
+        parent_id=target_parent_id
+    ).filter(Task.id != task.id).all()
+    max_pos = max([s.position for s in new_siblings], default=-1)
+    task.position = max_pos + 1
+
+    db.session.commit()
+
+    return jsonify(task.to_dict(include_children=True)), 200
+
+
+@app.route('/api/tasks/<int:task_id>/reorder', methods=['PUT'])
+@require_auth
+def reorder_task(task_id):
+    """Reorder a task among its siblings.
+    
+    Payload JSON:
+      - direction: 'up' or 'down'
+    
+    Swaps position with the previous (up) or next (down) sibling.
+    """
     task = Task.query.get(task_id)
     
     if not task:
         return jsonify({'error': 'Task not found'}), 404
     
-    # Verify ownership
     if task.list.user_id != request.current_user_id:
         return jsonify({'error': 'Unauthorized'}), 403
     
-    # Check if task is top-level
-    if task.parent_id is not None:
-        return jsonify({'error': 'Only top-level tasks can be moved between lists'}), 400
+    data = request.get_json() or {}
+    direction = data.get('direction')
     
-    data = request.get_json()
-    new_list_id = data.get('list_id')
+    if direction not in ['up', 'down']:
+        return jsonify({'error': 'Direction must be up or down'}), 400
     
-    if not new_list_id:
-        return jsonify({'error': 'New list_id is required'}), 400
+    # Get siblings (same parent and list)
+    siblings = Task.query.filter_by(
+        list_id=task.list_id,
+        parent_id=task.parent_id
+    ).order_by(Task.position).all()
     
-    # Verify new list ownership
-    new_list = TodoList.query.get(new_list_id)
-    if not new_list or new_list.user_id != request.current_user_id:
-        return jsonify({'error': 'New list not found or unauthorized'}), 403
+    current_idx = next(
+        (i for i, s in enumerate(siblings) if s.id == task.id),
+        None
+    )
+    if current_idx is None:
+        return jsonify({'error': 'Task not in sibling list'}), 500
     
-    task.list_id = new_list_id
+    # Determine swap target
+    swap_idx = None
+    if direction == 'up' and current_idx > 0:
+        swap_idx = current_idx - 1
+    elif direction == 'down' and current_idx < len(siblings) - 1:
+        swap_idx = current_idx + 1
+    
+    if swap_idx is None:
+        return jsonify({'message': 'Already at boundary'}), 200
+    
+    # Swap positions
+    siblings[current_idx].position, siblings[swap_idx].position = \
+        siblings[swap_idx].position, siblings[current_idx].position
+    
     db.session.commit()
     
     return jsonify(task.to_dict(include_children=True)), 200
