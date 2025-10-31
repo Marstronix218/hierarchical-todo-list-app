@@ -14,9 +14,6 @@ import { CSS } from '@dnd-kit/utilities';
 function TaskItem({ task, listId, allLists, onRefresh, depth, parentId, index }) {
   const [showAddSubtask, setShowAddSubtask] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [selectedListId, setSelectedListId] = useState(task.list_id);
-  const [selectedParentId, setSelectedParentId] = useState(task.parent_id ?? null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   // dnd-kit state
@@ -121,70 +118,7 @@ function TaskItem({ task, listId, allLists, onRefresh, depth, parentId, index })
     setIsEditing(false);
   };
 
-  /**
-   * Move task: allow moving under any parent in any list
-   */
-  const handleMoveTask = async () => {
-    try {
-      await axios.put(`/api/tasks/${task.id}/move`, {
-        list_id: selectedListId,
-        parent_id: selectedParentId
-      });
-      setShowMoveModal(false);
-      // Refresh possibly affected lists
-      onRefresh(task.list_id);
-      if (selectedListId !== task.list_id) onRefresh(selectedListId);
-    } catch (error) {
-      console.error('Error moving task:', error);
-      alert(error.response?.data?.error || 'Failed to move task');
-    }
-  };
-
-  /**
-   * Reorder task up or down among siblings
-   */
-  const handleReorder = async (direction) => {
-    try {
-      await axios.put(`/api/tasks/${task.id}/reorder`, {
-        direction
-      });
-      onRefresh(task.list_id);
-    } catch (error) {
-      console.error('Error reordering task:', error);
-      alert(error.response?.data?.error || 'Failed to reorder task');
-    }
-  };
-
-  // Helpers to build parent selection list while preventing cycles
-  const collectDescendantIds = (node) => {
-    const ids = new Set();
-    const stack = [...(node.children || [])];
-    while (stack.length) {
-      const n = stack.pop();
-      ids.add(n.id);
-      if (n.children) stack.push(...n.children);
-    }
-    return ids;
-  };
-
-  const forbiddenIds = React.useMemo(() => collectDescendantIds(task), [task]);
-
-  const flattenTasks = (nodes, prefix = '') => {
-    const result = [];
-    (nodes || []).forEach((n) => {
-      result.push({ id: n.id, label: `${prefix}${n.title}` });
-      if (n.children && n.children.length) {
-        result.push(...flattenTasks(n.children, `${prefix}— `));
-      }
-    });
-    return result;
-  };
-
-  const selectedList = allLists.find((l) => l.id === selectedListId);
-  const parentOptions = selectedList ? flattenTasks(selectedList.tasks || []) : [];
-
   const hasChildren = task.children && task.children.length > 0;
-  const canMove = true; // Any task can be moved
 
   // dnd-kit sortable
   const {
@@ -281,22 +215,6 @@ function TaskItem({ task, listId, allLists, onRefresh, depth, parentId, index })
           {!isEditing && (
             <>
               <button 
-                onClick={() => handleReorder('up')}
-                className="action-btn"
-                title="Move up"
-              >
-                ⬆️
-              </button>
-              
-              <button 
-                onClick={() => handleReorder('down')}
-                className="action-btn"
-                title="Move down"
-              >
-                ⬇️
-              </button>
-              
-              <button 
                 onClick={() => setIsEditing(true)}
                 className="action-btn"
                 title="Edit task"
@@ -311,16 +229,6 @@ function TaskItem({ task, listId, allLists, onRefresh, depth, parentId, index })
               >
                 ➕
               </button>
-              
-              {canMove && allLists.length > 1 && (
-                <button 
-                  onClick={() => setShowMoveModal(true)}
-                  className="action-btn"
-                  title="Move to another list"
-                >
-                  ↔️
-                </button>
-              )}
               
               <button 
                 onClick={handleDelete}
@@ -385,49 +293,6 @@ function TaskItem({ task, listId, allLists, onRefresh, depth, parentId, index })
           />
         </div>
       </SortableContext>
-    )}
-
-    {/* Move task modal */}
-    {showMoveModal && (
-      <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <h3>Move Task</h3>
-          <p>Select a destination list and optional parent:</p>
-          <select 
-            value={selectedListId} 
-            onChange={(e) => { setSelectedListId(parseInt(e.target.value)); setSelectedParentId(null); }}
-          >
-            {allLists.map(list => (
-              <option key={list.id} value={list.id}>
-                {list.name} {list.id === task.list_id ? '(current)' : ''}
-              </option>
-            ))}
-          </select>
-          <div style={{ height: '0.5rem' }} />
-          <select
-            value={selectedParentId ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              setSelectedParentId(v === '' ? null : parseInt(v));
-            }}
-          >
-            <option value="">(Top level)</option>
-            {parentOptions.map((opt) => (
-              (opt.id !== task.id && !forbiddenIds.has(opt.id)) && (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              )
-            ))}
-          </select>
-          <div className="modal-buttons">
-            <button onClick={handleMoveTask} className="btn-primary">
-              Move
-            </button>
-            <button onClick={() => setShowMoveModal(false)} className="btn-secondary">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
     )}
   </div>
   );
