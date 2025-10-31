@@ -6,11 +6,21 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import TodoList from './TodoList';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 
 function TodoApp({ token, user, onLogout }) {
   const [lists, setLists] = useState([]);
   const [newListName, setNewListName] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Configure sensors for drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement required to start drag
+      },
+    })
+  );
 
   // Set up axios default headers
   useEffect(() => {
@@ -87,6 +97,101 @@ function TodoApp({ token, user, onLogout }) {
     }
   };
 
+  /**
+   * Handle drag end - supports moving tasks within and between lists
+   */
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    
+    if (!active || !over || active.id === over.id) {
+      return;
+    }
+
+    // Find which list and task is being dragged
+    let sourceListId = null;
+    let draggedTask = null;
+    
+    for (const list of lists) {
+      const task = findTaskById(list.tasks, active.id);
+      if (task) {
+        sourceListId = list.id;
+        draggedTask = task;
+        break;
+      }
+    }
+
+    if (!draggedTask) {
+      console.error('Could not find dragged task');
+      return;
+    }
+
+    // Determine target list, parent, and position
+    let targetListId = null;
+    let targetParentId = null;
+    let targetPosition = 0;
+
+    // Parse the drop target
+    const overIdStr = over.id.toString();
+    
+    if (overIdStr.includes('-dropzone-')) {
+      // Dropping on a drop zone: format is "list-{listId}-{parentId or 'root'}-dropzone-{position}"
+      const match = overIdStr.match(/^list-(\d+)-(root|\d+)-dropzone-(\d+)$/);
+      if (match) {
+        targetListId = parseInt(match[1]);
+        targetParentId = match[2] === 'root' ? null : parseInt(match[2]);
+        targetPosition = parseInt(match[3]);
+      } else {
+        console.error('Could not parse drop zone ID:', overIdStr);
+        return;
+      }
+    } else {
+      // Dropping on a task - make it a child
+      targetParentId = over.id;
+      for (const list of lists) {
+        const targetTask = findTaskById(list.tasks, over.id);
+        if (targetTask) {
+          targetListId = list.id;
+          targetPosition = targetTask.children ? targetTask.children.length : 0;
+          break;
+        }
+      }
+    }
+
+    if (!targetListId) {
+      console.error('Could not determine target list');
+      return;
+    }
+
+    try {
+      await axios.put(`/api/tasks/${active.id}/move`, {
+        list_id: targetListId,
+        parent_id: targetParentId,
+        position: targetPosition
+      });
+      
+      // Refresh affected lists
+      handleRefreshList(sourceListId);
+      if (targetListId !== sourceListId) {
+        handleRefreshList(targetListId);
+      }
+    } catch (error) {
+      console.error('Error moving task:', error);
+      alert(error.response?.data?.error || 'Failed to move task');
+    }
+  };
+
+  // Helper to find a task by ID in the tree
+  const findTaskById = (tasks, id) => {
+    for (const task of tasks || []) {
+      if (task.id === id) return task;
+      if (task.children) {
+        const found = findTaskById(task.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <div>
@@ -132,15 +237,21 @@ function TodoApp({ token, user, onLogout }) {
           </div>
         ) : (
           <div className="lists-container">
-            {lists.map(list => (
-              <TodoList
-                key={list.id}
-                list={list}
-                allLists={lists}
-                onDelete={handleDeleteList}
-                onRefresh={handleRefreshList}
-              />
-            ))}
+            <DndContext 
+              collisionDetection={closestCenter} 
+              onDragEnd={handleDragEnd}
+              sensors={sensors}
+            >
+              {lists.map(list => (
+                <TodoList
+                  key={list.id}
+                  list={list}
+                  allLists={lists}
+                  onDelete={handleDeleteList}
+                  onRefresh={handleRefreshList}
+                />
+              ))}
+            </DndContext>
           </div>
         )}
       </div>

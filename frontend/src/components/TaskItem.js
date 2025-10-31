@@ -3,10 +3,15 @@
  * Displays a single task with its subtasks (recursive component)
  */
 
+
 import React, { useState } from 'react';
 import axios from 'axios';
+import { useDroppable } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-function TaskItem({ task, listId, allLists, onRefresh, depth }) {
+function TaskItem({ task, listId, allLists, onRefresh, depth, parentId, index }) {
   const [showAddSubtask, setShowAddSubtask] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -14,6 +19,7 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
   const [selectedParentId, setSelectedParentId] = useState(task.parent_id ?? null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
+  // dnd-kit state
   const [isDragOver, setIsDragOver] = useState(false);
 
   /**
@@ -180,62 +186,54 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
   const hasChildren = task.children && task.children.length > 0;
   const canMove = true; // Any task can be moved
 
+  // dnd-kit sortable
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    over,
+  } = useSortable({ id: task.id });
+
+  // dnd-kit droppable for drop indicator between tasks
+  const dropZoneId = `list-${listId}-${parentId || 'root'}-dropzone-${index}`;
+  const { setNodeRef: setDropZoneRef, isOver: isDropZoneOver } = useDroppable({ id: dropZoneId });
+
+  // Style for draggable
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 100 : 'auto',
+  };
+
   return (
-    <div
-      className={`task-item ${isDragOver ? 'drag-over' : ''}`}
-      draggable
-      onDragStart={(e) => {
-        // mark this task as the dragged source
-        try {
-          e.dataTransfer.setData(
-            'application/json',
-            JSON.stringify({ taskId: task.id, listId: task.list_id })
-          );
-        } catch (err) {
-          // noop
-        }
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragOver(true);
-        e.dataTransfer.dropEffect = 'move';
-      }}
-      onDragLeave={(e) => {
-        e.stopPropagation();
-        setIsDragOver(false);
-      }}
-      onDrop={async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragOver(false);
-        let payload = null;
-        try {
-          const text = e.dataTransfer.getData('application/json');
-          payload = JSON.parse(text);
-        } catch (err) {
-          return;
-        }
-        if (!payload || !payload.taskId) return;
-        if (payload.taskId === task.id) return; // ignore dropping onto itself
-        try {
-          await axios.put(`/api/tasks/${payload.taskId}/move`, {
-            list_id: task.list_id,
-            parent_id: task.id
-          });
-          // refresh affected lists
-          onRefresh(task.list_id);
-          if (payload.listId && payload.listId !== task.list_id) {
-            onRefresh(payload.listId);
-          }
-        } catch (error) {
-          console.error('Error moving via DnD:', error);
-          alert(error.response?.data?.error || 'Failed to move task');
-        }
-      }}
-    >
-      <div className={`task-content ${task.completed ? 'completed' : ''}`}>
+    <div style={{ position: 'relative' }}>
+      {/* Drop zone before this task */}
+      <div
+        ref={setDropZoneRef}
+        className="drop-indicator"
+        style={{
+          height: '10px',
+          background: isDropZoneOver ? '#3498db' : 'transparent',
+          margin: '2px 0',
+          borderRadius: '4px',
+          transition: 'background 0.15s',
+        }}
+      />
+      <div
+        ref={setNodeRef}
+        className={`task-item${isDragging ? ' dragging' : ''}`}
+        style={style}
+      >
+        <div className={`task-content ${task.completed ? 'completed' : ''}`}>
+        {/* Drag handle - separate from interactive elements */}
+        <div {...attributes} {...listeners} className="drag-handle" title="Drag to reorder">
+          ⋮⋮
+        </div>
+        
         <input
           type="checkbox"
           className="task-checkbox"
@@ -358,67 +356,101 @@ function TaskItem({ task, listId, allLists, onRefresh, depth }) {
           </form>
         </div>
       )}
+    </div>
 
-      {/* Subtasks */}
-      {hasChildren && !task.collapsed && (
+    {/* Subtasks with dnd-kit context */}
+    {hasChildren && !task.collapsed && (
+      <SortableContext
+        items={task.children.map((c) => c.id)}
+        strategy={verticalListSortingStrategy}
+      >
         <div className="subtasks" style={{ marginLeft: `${Math.min((depth + 1) * 16, 64)}px` }}>
-          {task.children.map(child => (
-            <div key={child.id} className="subtask-item">
-              <TaskItem
-                task={child}
-                listId={task.list_id}
-                allLists={allLists}
-                onRefresh={onRefresh}
-                depth={depth + 1}
-              />
-            </div>
+          {task.children.map((child, idx) => (
+            <TaskItem
+              key={child.id}
+              task={child}
+              listId={task.list_id}
+              allLists={allLists}
+              onRefresh={onRefresh}
+              depth={depth + 1}
+              parentId={task.id}
+              index={idx}
+            />
           ))}
+          {/* Drop zone at end of children */}
+          <DropZoneAfterChildren
+            listId={listId}
+            parentId={task.id}
+            index={task.children.length}
+          />
         </div>
-      )}
+      </SortableContext>
+    )}
 
-      {/* Move task modal */}
-      {showMoveModal && (
-        <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Move Task</h3>
-            <p>Select a destination list and optional parent:</p>
-            <select 
-              value={selectedListId} 
-              onChange={(e) => { setSelectedListId(parseInt(e.target.value)); setSelectedParentId(null); }}
-            >
-              {allLists.map(list => (
-                <option key={list.id} value={list.id}>
-                  {list.name} {list.id === task.list_id ? '(current)' : ''}
-                </option>
-              ))}
-            </select>
-            <div style={{ height: '0.5rem' }} />
-            <select
-              value={selectedParentId ?? ''}
-              onChange={(e) => {
-                const v = e.target.value;
-                setSelectedParentId(v === '' ? null : parseInt(v));
-              }}
-            >
-              <option value="">(Top level)</option>
-              {parentOptions.map((opt) => (
-                (opt.id !== task.id && !forbiddenIds.has(opt.id)) && (
-                  <option key={opt.id} value={opt.id}>{opt.label}</option>
-                )
-              ))}
-            </select>
-            <div className="modal-buttons">
-              <button onClick={handleMoveTask} className="btn-primary">
-                Move
-              </button>
-              <button onClick={() => setShowMoveModal(false)} className="btn-secondary">
-                Cancel
-              </button>
-            </div>
+    {/* Move task modal */}
+    {showMoveModal && (
+      <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <h3>Move Task</h3>
+          <p>Select a destination list and optional parent:</p>
+          <select 
+            value={selectedListId} 
+            onChange={(e) => { setSelectedListId(parseInt(e.target.value)); setSelectedParentId(null); }}
+          >
+            {allLists.map(list => (
+              <option key={list.id} value={list.id}>
+                {list.name} {list.id === task.list_id ? '(current)' : ''}
+              </option>
+            ))}
+          </select>
+          <div style={{ height: '0.5rem' }} />
+          <select
+            value={selectedParentId ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedParentId(v === '' ? null : parseInt(v));
+            }}
+          >
+            <option value="">(Top level)</option>
+            {parentOptions.map((opt) => (
+              (opt.id !== task.id && !forbiddenIds.has(opt.id)) && (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              )
+            ))}
+          </select>
+          <div className="modal-buttons">
+            <button onClick={handleMoveTask} className="btn-primary">
+              Move
+            </button>
+            <button onClick={() => setShowMoveModal(false)} className="btn-secondary">
+              Cancel
+            </button>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    )}
+  </div>
+  );
+}
+
+
+
+// Drop zone after all children (for dropping at end)
+function DropZoneAfterChildren({ listId, parentId, index }) {
+  const dropZoneId = `list-${listId}-${parentId || 'root'}-dropzone-${index}`;
+  const { setNodeRef, isOver } = useDroppable({ id: dropZoneId });
+  return (
+    <div
+      ref={setNodeRef}
+      className="drop-indicator"
+      style={{
+        height: '10px',
+        background: isOver ? '#3498db' : 'transparent',
+        margin: '2px 0',
+        borderRadius: '4px',
+        transition: 'background 0.15s',
+      }}
+    />
   );
 }
 

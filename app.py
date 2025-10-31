@@ -441,13 +441,22 @@ def move_task(task_id):
             n.list_id = target_list_id
             stack.extend(n.children)
     
-    # Set position to end of new sibling group
-    new_siblings = Task.query.filter_by(
+
+    # Insert at specified position (default: end)
+    insert_at = data.get('position')
+    siblings = Task.query.filter_by(
         list_id=target_list_id,
         parent_id=target_parent_id
-    ).filter(Task.id != task.id).all()
-    max_pos = max([s.position for s in new_siblings], default=-1)
-    task.position = max_pos + 1
+    ).filter(Task.id != task.id).order_by(Task.position).all()
+    if insert_at is None or not isinstance(insert_at, int) or insert_at < 0 or insert_at > len(siblings):
+        insert_at = len(siblings)
+    # Shift positions of siblings >= insert_at
+    for i, sib in enumerate(siblings):
+        if i >= insert_at:
+            sib.position = i + 1
+        else:
+            sib.position = i
+    task.position = insert_at
 
     db.session.commit()
 

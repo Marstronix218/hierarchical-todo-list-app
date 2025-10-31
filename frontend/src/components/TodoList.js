@@ -6,10 +6,12 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import TaskItem from './TaskItem';
+import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 function TodoList({ list, allLists, onDelete, onRefresh }) {
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [isDropActive, setIsDropActive] = useState(false);
+  // Remove isDropActive, not needed with dnd-kit
 
   /**
    * Create a new top-level task
@@ -29,6 +31,24 @@ function TodoList({ list, allLists, onDelete, onRefresh }) {
       console.error('Error creating task:', error);
       alert('Failed to create task');
     }
+  };
+
+  // dnd-kit move handler for this list (now handled at TodoApp level, but keep for backwards compat)
+  const handleDragEnd = async (event) => {
+    // This is now handled by TodoApp's global DndContext
+    // Keeping this stub for potential list-specific logic
+  };
+
+  // Helper to find a task by ID in the tree
+  const findTaskById = (tasks, id) => {
+    for (const task of tasks || []) {
+      if (task.id === id) return task;
+      if (task.children) {
+        const found = findTaskById(task.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
   };
 
   return (
@@ -55,63 +75,53 @@ function TodoList({ list, allLists, onDelete, onRefresh }) {
         <button type="submit" className="btn-success">Add</button>
       </form>
 
-      {/* Top-level drop zone to move tasks here */}
-      <div
-        className={`list-drop-zone ${isDropActive ? 'active' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDropActive(true);
-        }}
-        onDragLeave={() => setIsDropActive(false)}
-        onDrop={async (e) => {
-          e.preventDefault();
-          setIsDropActive(false);
-          let payload = null;
-          try {
-            payload = JSON.parse(e.dataTransfer.getData('application/json'));
-          } catch (err) {
-            return;
-          }
-          if (!payload || !payload.taskId) return;
-          try {
-            await axios.put(`/api/tasks/${payload.taskId}/move`, {
-              list_id: list.id,
-              parent_id: null
-            });
-            onRefresh(list.id);
-            if (payload.listId && payload.listId !== list.id) {
-              onRefresh(payload.listId);
-            }
-          } catch (error) {
-            console.error('Error moving to top-level via DnD:', error);
-            alert(error.response?.data?.error || 'Failed to move task');
-          }
-        }}
-        title="Drop here to move task to top level"
-        style={{ marginBottom: '0.5rem' }}
+      <SortableContext
+        items={list.tasks ? list.tasks.map((t) => t.id) : []}
+        strategy={verticalListSortingStrategy}
       >
-        Drop here to move to top level
-      </div>
-
-      <div className="tasks-container">
-        {list.tasks && list.tasks.length > 0 ? (
-          list.tasks.map(task => (
-            <TaskItem
-              key={task.id}
-              task={task}
-              listId={list.id}
-              allLists={allLists}
-              onRefresh={onRefresh}
-              depth={0}
-            />
-          ))
-        ) : (
-          <div style={{ color: '#7f8c8d', fontSize: '0.9rem', padding: '1rem' }}>
-            No tasks yet. Add one above!
-          </div>
-        )}
-      </div>
+        <div className="tasks-container">
+          {list.tasks && list.tasks.length > 0 ? (
+            list.tasks.map((task, idx) => (
+              <TaskItem
+                key={task.id}
+                task={task}
+                listId={list.id}
+                allLists={allLists}
+                onRefresh={onRefresh}
+                depth={0}
+                parentId={null}
+                index={idx}
+              />
+            ))
+          ) : (
+            <div style={{ color: '#7f8c8d', fontSize: '0.9rem', padding: '1rem' }}>
+              No tasks yet. Add one above!
+            </div>
+          )}
+          {/* Drop zone at end of top-level tasks */}
+          <TopLevelDropZone listId={list.id} taskCount={list.tasks ? list.tasks.length : 0} />
+        </div>
+      </SortableContext>
     </div>
+  );
+}
+
+// Drop zone component for end of top-level tasks
+function TopLevelDropZone({ listId, taskCount }) {
+  const dropZoneId = `list-${listId}-root-dropzone-${taskCount}`;
+  const { setNodeRef, isOver } = useDroppable({ id: dropZoneId });
+  return (
+    <div
+      ref={setNodeRef}
+      className="drop-indicator"
+      style={{
+        height: '10px',
+        background: isOver ? '#3498db' : 'transparent',
+        margin: '2px 0',
+        borderRadius: '4px',
+        transition: 'background 0.15s',
+      }}
+    />
   );
 }
 

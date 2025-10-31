@@ -257,8 +257,25 @@ input[type="password"]:focus {
   border-left: 3px solid #3498db;
 }
 
-.task-item[draggable="true"] {
+.drag-handle {
   cursor: grab;
+  color: #95a5a6;
+  font-weight: bold;
+  padding: 0.2rem 0.4rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:hover {
+  color: #3498db;
+}
+
+.task-item.dragging {
+  opacity: 0.5;
 }
 
 .task-item.drag-over .task-content {
@@ -429,6 +446,19 @@ input[type="password"]:focus {
   border-color: #3498db;
   background: #eef7ff;
   color: #2c3e50;
+}
+
+/* Drop indicators for dnd-kit */
+.drop-indicator {
+  height: 10px;
+  background: transparent;
+  margin: 2px 0;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.drop-indicator:hover {
+  background: rgba(52, 152, 219, 0.2);
 }
 
 .new-list-section input {
