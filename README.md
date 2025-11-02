@@ -410,5 +410,3 @@ Before submitting your zip file:
 - **Testing**: pytest 8.2, React Testing Library
 - **Authentication**: JWT tokens (7-day expiration)
 - **Database**: SQLite with cascade deletes for data integrity
-
-## Created for CS162 Web Development Course
