@@ -83,6 +83,20 @@ hierarchical_todo_list_app/
 
 ## Installation & Setup
 
+### Quick start (frontend only)
+
+From the top-level project directory:
+
+```bash
+npm install
+npm start
+```
+
+Notes:
+- Requires Node.js 16+ and npm 7+ (for workspaces). You can check with `node -v` and `npm -v`.
+- This will install the frontend dependencies and launch the React dev server at http://localhost:3000.
+- The frontend proxies API requests to http://localhost:5000 (make sure the Flask backend is running if you want a functional app).
+
 ### Prerequisites
 - Python 3.8 or higher
 - Node.js 14 or higher
@@ -132,28 +146,15 @@ python3 app.py
 
 ### Frontend Setup (React)
 
-Open a **new terminal window** and run one of the following options:
-
-Option A — from the project root (no cd needed):
+If you prefer to run from within the `frontend` folder directly:
 
 ```bash
-# From hierarchical_todo_list_app/
-# First time only: install frontend deps from root
-npm run install-frontend
-
-# Start the React development server from root
-npm start
-```
-
-Option B — from the frontend directory (original way):
-
-```bash
-cd hierarchical_todo_list_app/frontend
+cd frontend
 npm install
 npm start
 ```
 
-The frontend will start on `http://localhost:3000` and automatically open in your browser.
+The frontend will start on `http://localhost:3000` and may automatically open in your browser.
 
 ### UI Notes
 

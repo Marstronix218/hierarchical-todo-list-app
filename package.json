@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "description": "Root-level package to proxy frontend scripts so you can run npm commands from the project root.",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
     "start": "npm --prefix frontend start",
     "build": "npm --prefix frontend run build",
