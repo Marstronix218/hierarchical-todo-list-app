@@ -6,7 +6,7 @@ A full-stack web application that allows users to create and manage hierarchical
 
 **[INSERT YOUR SCREEN RECORDING LINK HERE]**
 
-(Please record a 3-5 minute demo showing all features of the application)
+Please record a 3-5 minute screen recording demonstrating all features of the application. Use [Loom](https://loom.com/) or any screen recording tool, and ensure the link is publicly viewable.
 
 ## Features
 
@@ -81,26 +81,14 @@ hierarchical_todo_list_app/
             └── TaskItem.js # Recursive task component
 ```
 
-## Installation & Setup
+## Installation
 
-### Quick start (frontend only)
-
-From the top-level project directory:
-
-```bash
-npm install
-npm start
-```
-
-Notes:
-- Requires Node.js 16+ and npm 7+ (for workspaces). You can check with `node -v` and `npm -v`.
-- This will install the frontend dependencies and launch the React dev server at http://localhost:3000.
-- The frontend proxies API requests to http://localhost:5000 (make sure the Flask backend is running if you want a functional app).
+To run this application, follow these steps exactly as specified:
 
 ### Prerequisites
 - Python 3.8 or higher
 - Node.js 14 or higher
-- npm or yarn
+- npm
 
 ### Backend Setup (Flask)
 
@@ -146,15 +134,22 @@ python3 app.py
 
 ### Frontend Setup (React)
 
-If you prefer to run from within the `frontend` folder directly:
+Open a **new terminal window** and run:
 
 ```bash
-cd frontend
+cd hierarchical_todo_list_app/frontend
 npm install
 npm start
 ```
 
-The frontend will start on `http://localhost:3000` and may automatically open in your browser.
+The frontend will start on `http://localhost:3000` and automatically open in your browser.
+
+**Alternative:** From the project root directory, you can also run:
+```bash
+npm install
+npm start
+```
+This uses npm workspaces to install and start the frontend.
 
 ### UI Notes
 
@@ -270,22 +265,21 @@ All authenticated endpoints require `Authorization: Bearer <token>` header.
 - Collapsed state is saved per-task in the database
 - JWT tokens expire after 7 days
 
-## Known Limitations
+## Extensions Implemented
 
-1. No explicit drag-and-drop reordering yet (moves are via the Move action modal)
-2. No forgot password functionality
+1. ✅ **Infinite Nesting (Extension #1)**: Tasks can be nested without depth limit. The UI handles deep nesting with progressive indentation and text wrapping.
 
-## Future Enhancements
+2. ✅ **Arbitrary Task Movement (Extension #2)**: 
+   - Move any task or subtask to any list
+   - Reparent tasks (change parent or move to top level)
+   - Drag-and-drop support for moving tasks
+   - Reorder tasks among siblings with ⬆️⬇️ buttons
 
-Possible extensions beyond MVP:
-- Allow infinite nesting depth with better UI/UX
-- Enable moving any task to any position
-- Add task due dates and priorities
-- Implement task search and filtering
-- Add task descriptions and notes
-- Enable task reordering with drag-and-drop
-- Add task editing capabilities
-- Implement shared lists between users
+3. ✅ **Comprehensive Testing (Extension #3)**:
+   - 50 backend unit tests with pytest
+   - 5 frontend component tests with React Testing Library
+   - Tests cover authentication, authorization, CRUD operations, security, and edge cases
+   - All tests passing
 
 ## Troubleshooting
 
@@ -307,44 +301,116 @@ Possible extensions beyond MVP:
 
 ## Testing
 
-To test the application:
+### Manual Testing
 
-1. Create multiple user accounts
-2. Verify each user only sees their own lists
-3. Create lists and tasks with multiple levels
-4. Test collapse/expand functionality
-5. Test moving tasks between lists
-6. Test marking tasks as complete
-7. Test deleting tasks and lists
-8. Log out and log back in to verify data persistence
+Test all MVP features:
+1. Create multiple user accounts and verify each user only sees their own lists
+2. Create lists and tasks with multiple levels of nesting
+3. Mark tasks as complete/incomplete
+4. Collapse/expand tasks to hide/show subtasks
+5. Move top-level tasks between lists
+6. Delete tasks and lists
+7. Log out and log back in to verify data persistence
 
-### Automated tests
+### Automated Tests (Extension #3)
 
-- Backend tests (pytest): tests infinite nesting API and task moves, including cycle prevention.
-- Frontend tests (React Testing Library): verifies rendering of a 5-level nested task tree.
+This project includes comprehensive unit tests covering:
+- **Backend tests** (50 tests): Authentication, authorization, list/task CRUD, security, edge cases, infinite nesting, cycle prevention
+- **Frontend tests** (5 tests): Component rendering, user interactions, recursive task display
 
-From the project root:
+#### Running Backend Tests
 
 ```bash
-# Install backend dependencies (includes pytest)
-pip3 install -r requirements.txt
+# Ensure backend is running in another terminal (python3 app.py)
+cd hierarchical_todo_list_app
+source venv/bin/activate  # or venv\Scripts\activate.bat on Windows
+pytest -v
+```
 
-# Ensure backend is running in another terminal
-python3 app.py
+All 50 backend tests should pass, covering:
+- User authentication (registration, login, JWT tokens)
+- Authorization (protected routes, token validation)
+- Cross-user isolation (users cannot access others' data)
+- List operations (create, read, update, delete)
+- Task operations (create, update, complete, collapse, move, delete)
+- Hierarchical structure (infinite nesting, cascade deletes)
+- Move operations (including cycle prevention)
+- Reordering tasks
+- Input validation and error handling
+- Security (special characters, SQL injection prevention)
 
-# Run backend tests
-pytest -q
+#### Running Frontend Tests
 
-# Run frontend tests
+```bash
+cd hierarchical_todo_list_app/frontend
 npm test -- --watchAll=false
 ```
 
-Note: Backend tests exercise the live API. Make sure the Flask server is listening on http://localhost:5000.
+Frontend tests verify:
+- 5-level nested task tree rendering
+- Drag-and-drop functionality
+- Authentication components
+- TodoApp component functionality
 
-## Author
+**Note:** Backend tests require the Flask server to be running on http://localhost:5000.
 
-Created for CS162 Web Development Course
+## Project Structure
 
-## License
+```
+hierarchical_todo_list_app/
+├── app.py                     # Flask backend (553 lines)
+├── requirements.txt           # Python dependencies
+├── pytest.ini                 # Pytest configuration
+├── package.json               # Root npm config (workspaces)
+├── README.md                  # This file
+├── .gitignore                 # Git ignore rules
+├── test_api.py                # Manual API test script
+├── tests/                     # Backend test suite
+│   ├── test_comprehensive.py  # Auth, CRUD, edge cases (29 tests)
+│   ├── test_security.py       # Security & isolation (19 tests)
+│   ├── test_backend_move.py   # Move & nesting (1 test)
+│   └── test_reorder.py        # Task reordering (1 test)
+└── frontend/
+    ├── package.json           # Node dependencies
+    ├── public/
+    │   └── index.html
+    └── src/
+        ├── index.js
+        ├── App.js
+        ├── App.css
+        ├── Auth.test.js       # Auth component tests
+        ├── TodoApp.test.js    # TodoApp component tests
+        ├── TaskItem.test.js   # Task rendering tests
+        ├── dragDrop.test.js   # Drag-and-drop tests
+        └── components/
+            ├── Auth.js        # Login/register
+            ├── TodoApp.js     # Main container
+            ├── TodoList.js    # List display
+            └── TaskItem.js    # Recursive task component
+```
 
-This project is created for educational purposes.
+## Submission Checklist
+
+Before submitting your zip file:
+
+1. ✅ Test that all features work
+2. ✅ Record demo video (3-5 minutes)
+3. ✅ Add demo video link to README.md
+4. ✅ Run automated tests to verify they pass
+5. ⚠️ **Delete these before zipping:**
+   - `venv/` folder
+   - `frontend/node_modules/` folder
+   - `todo_app.db` file
+   - `__pycache__/` folders
+   - `.git/` folder (if present)
+6. ✅ Test installation on fresh setup with commands above
+
+## Technologies Used
+
+- **Backend**: Flask 3.0, SQLAlchemy 3.1, Flask-CORS, PyJWT, SQLite
+- **Frontend**: React 18, Axios, dnd-kit (drag-and-drop)
+- **Testing**: pytest 8.2, React Testing Library
+- **Authentication**: JWT tokens (7-day expiration)
+- **Database**: SQLite with cascade deletes for data integrity
+
+## Created for CS162 Web Development Course
