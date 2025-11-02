@@ -4,9 +4,7 @@ A full-stack web application that allows users to create and manage hierarchical
 
 ## Demo Video
 
-**[INSERT YOUR SCREEN RECORDING LINK HERE]**
-
-Please record a 3-5 minute screen recording demonstrating all features of the application. Use [Loom](https://loom.com/) or any screen recording tool, and ensure the link is publicly viewable.
+**[LOOM](https://www.loom.com/share/5798f393acc14540ae260b77d22f1da9)**
 
 ## Features
 
